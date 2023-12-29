@@ -5,15 +5,18 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RectAreaLightHelper } from 'three/addons/helpers/RectAreaLightHelper.js';
+// import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+// import { VertexNormalsHelper } from 'three/addons/helpers/VertexNormalsHelper.js';
 
 THREE.ColorManagement.enabled = true;
-let model, scene, renderer, camera, cameraHelper, floor, controls, composer;
-const objects = [];
+let model, scene, renderer, camera, cameraHelper, floor, controls, composer, dirLight;
 const container = document.getElementById("scene3d");
+const labelContainer = document.getElementById("labels");
 var raycaster = new THREE.Raycaster();
 var mouse = new THREE.Vector2();
-
-console.log('hello');
+var orbited = false;
 
 function cWidth() {
   return container.getBoundingClientRect().width;
@@ -31,6 +34,7 @@ init();
 function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xb0b0b0);
+  scene.fog = new THREE.Fog(0xcfcfd5, 4, 9);
 
   camera = new THREE.PerspectiveCamera(20, cAspect(), 0.1, 100);
   camera.position.x = -3;
@@ -38,25 +42,19 @@ function init() {
   camera.position.z = 4;
   camera.lookAt(scene.position);
 
-  const light = new THREE.AmbientLight(0xa0a0a0, 4); // soft white light
+  const light = new THREE.AmbientLight(0xa0a0a0, 4);
   scene.add(light);
 
-  const dirLight = new THREE.DirectionalLight(0xc0c0c0, 6);
-  dirLight.position.set(-5, 5, 5);
+  dirLight = new THREE.DirectionalLight(0xc0c0c0, 1);
+  dirLight.position.copy(camera.position);
   dirLight.castShadow = true;
   scene.add(dirLight);
-  scene.add(new THREE.CameraHelper(dirLight.shadow.camera));
 
   const loader = new GLTFLoader();
   loader.load('public/cg/rig.glb',
     function (gltf) {
       model = gltf.scene;
-      model.traverse(function (object) {
-        if (object.isMesh && object.type=="SkinnedMesh") {
-            object.castShadow = true;
-            object.material.opacity = 0.7;
-        }
-      });
+      model.traverse((o) => makeHighlightable(o));
       setupDefaultScene();
     },
     undefined,
@@ -66,11 +64,66 @@ function init() {
   );
 }
 
+function displayLabels(name) {
+  var label = document.createElement('p');
+  label.innerHTML = name;
+  labelContainer.appendChild(label);
+}
+
+function clearLabels() {
+  Array.from(labelContainer.getElementsByTagName('p')).forEach((p) => p.remove());
+}
+
+function makeHighlightable(obj) {
+  obj.isHighlightable = (obj.isMesh && obj.type=="SkinnedMesh");
+  obj.highlight = () => {};
+  obj.reset = () => {};
+
+  function fullNames() {
+    var result = [];
+    obj.traverseAncestors((p) => result.push(p.name));
+    result.unshift(obj.name);
+    return result;
+  };
+  const ancestorNames = obj.ancestorNames = fullNames();
+  obj.hierarchicalName = () => { return obj.name; };
+
+  if (!obj.isHighlightable) return;
+
+  obj.castShadow = true;
+  const mat = obj.material = obj.material.clone();
+  mat.opacity = 1;
+  mat.side = obj.material.side = THREE.FrontSide;
+  mat.oldEmissive = mat.emissive.clone();
+  mat.oldToneMapped = mat.toneMapped;
+  obj.isMuscle = obj.ancestorNames.includes("Muscular001");
+  obj.isHighlighted = false;
+  if (!obj.isMuscle) return;
+
+  obj.highlight = () => {
+    displayLabels(obj.hierarchicalName());
+    // mat.emissive.set(0xbb8899);
+    mat.emissive.set(0xcc8899 * (Math.random() * (0.5-0.7) + 0.5));
+    mat.toneMapped = false;
+    obj.isHighlighted = true;
+  };
+  obj.reset = () => {
+    mat.emissive.set(mat.oldEmissive);
+    mat.toneMapped = mat.oldToneMapped;
+    obj.isHighlighted = false;
+  }
+  obj.hierarchicalName = () => {
+    const slicedNames = ancestorNames.slice(0, ancestorNames.indexOf("Muscular001"));
+    return slicedNames.map((e) => e.replace(/(_L001|_R001|001)/, '').replace('_', ' ')).join(" >> ");
+  }
+}
+
 function setupDefaultScene() {
   floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshPhongMaterial({color: 0xcbcbcb, depthWrite: false}));
   floor.rotation.x = - Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
+
 
   renderer = new THREE.WebGLRenderer( { antialias: true } );
   renderer.setPixelRatio(window.devicePixelRatio);
@@ -78,6 +131,9 @@ function setupDefaultScene() {
   renderer.shadowMap.enabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.domElement.style.background = 'linear-gradient( 180deg, rgba( 0,0,0,1 ) 0%, rgba( 128,128,255,1 ) 100% )';
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.CineonToneMapping;
+
   container.appendChild(renderer.domElement);
 
   controls = new OrbitControls(camera, renderer.domElement);
@@ -89,19 +145,13 @@ function setupDefaultScene() {
   controls.maxPolarAngle = 1.33;
   controls.screenSpacePanning = true;
   controls.target.set(0, 1, 0);
+  controls.addEventListener('change', () => orbited ||= true);
   controls.update();
-
-  new RGBELoader().load('public/cg/venice_sunset_1k.hdr', function (hdrEquirect) {
-    hdrEquirect.mapping = THREE.EquirectangularReflectionMapping;
-    scene.environment = hdrEquirect;
-  });
-
   model.position.x = 0;
   model.position.y = 0;
   model.position.z = 0;
   scene.add(model);
-
-  objects.push(model);
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment()).texture;
   animate();
 }
 
@@ -112,34 +162,34 @@ function onWindowResize() {
 }
 window.addEventListener('resize', onWindowResize);
 
-function onDocumentMouseDown(event) {
+function onClick(event) {
     event.preventDefault();
-
+    orbited = false;
     const rect = renderer.domElement.getBoundingClientRect();
     mouse.x = ( ( event.clientX - rect.left ) / ( rect.right - rect.left ) ) * 2 - 1;
     mouse.y = - ( ( event.clientY - rect.top ) / ( rect.bottom - rect.top) ) * 2 + 1;
+    if (!orbited) {
+      model.traverse((o) => {
+        if (o.isHighlightable && o.isHighlighted) {
+          o.reset();
+        }
+      });
+    }
 
+    const raycasterCam = new THREE.PerspectiveCamera().copy(camera);
+    raycasterCam.fov = 20;
+    raycasterCam.updateProjectionMatrix();
     raycaster.setFromCamera(mouse, camera);
-    var intersects = raycaster.intersectObjects([model], true);
-    if ( intersects.length > 0 ) {
-        intersects = intersects.map((i) => hierarchicalName(i, i.object)).filter((e) => !!e);
-        console.log(new Set(intersects));
+    var intersects = raycaster.intersectObjects([model]);
+    if (intersects.length > 0) {
+      clearLabels()
+      // intersects.forEach((i) => {
+      //   console.log("dot: ", /* camera.getWorldDirection(new THREE.Vector3()).dot(i.face.normal), */ i.object.hierarchicalName(), i.face);
+      // });
+      new Set(intersects.map((i) => i.object)).forEach((o) => o.highlight());
     }
 }
-
-function hierarchicalName(i, o) {
-  const parents = [];
-  o.traverseAncestors((p) => parents.push(p.name));
-  if (!parents.includes("Muscular001")) {
-    return;
-  }
-  const hierarchy = parents.slice(0, parents.indexOf("Muscular001"));
-  hierarchy.unshift(o.name);
-  const pattern = /(_L001|_R001|001)/;
-  return hierarchy.map((e) => e.replace(pattern, '').replace('_', ' ')).join(" >> ");
-}
-
-document.addEventListener('click', onDocumentMouseDown, false);
+document.addEventListener('click', onClick, false);
 
 function animate() {
   requestAnimationFrame(animate);
