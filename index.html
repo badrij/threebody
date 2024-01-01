@@ -2,17 +2,23 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8">
-		<title>The Musculoskeltal System</title>
+		<title>Musculoskeltal system</title>
 		<style>
 			#wrapper {
-				display: flex;
+				display: grid;
+				grid-template-columns: repeat(1000px 500px);
+				gap: 25px;
+				/* grid-auto-rows: minmax(3500px, auto); */
 				width: 1600px;
 				margin: 25px auto;
 				align-items: flex-start;
+				flex-wrap: wrap;
 
 			}
+
 			#scene3d {
-				margin: 25px auto;
+				grid-column: 1;
+				grid-row: 1/4;
 				width: 1000px;
 				height: 1000px;
 				border-radius: 12px;
@@ -22,10 +28,34 @@
 			}
 
 			#labels {
+				grid-column: 2;
+				grid-row: 1/2;
+
+
 				width: 500px;
-				height: 300px;
+				height: 450px;
 				padding: 10px;
-				margin: 25px auto;
+				margin: 0 auto;
+				border-radius: 8px;
+				font-family: sans-serif;
+				font-size: 1em;
+				color: rgb(80, 80, 75);
+				text-shadow: 0 0 7px rgba(255, 255, 255, 0.7);
+
+				background: rgba(255, 255, 255, 0.2);
+				box-shadow: 0 8px 32px 0 rgba( 31, 38, 135, 0.37);
+				backdrop-filter: blur(5px);
+				border: 1px solid rgba(255, 255, 255, 0.4);
+			}
+
+			#notes {
+				grid-column: 2;
+				grid-row: 3/4;
+
+				width: 500px;
+				height: 450px;
+				padding: 10px;
+				margin: 0 auto;
 				border-radius: 8px;
 				font-family: sans-serif;
 				font-size: 1em;
@@ -56,7 +86,12 @@
 		<script type="module" src="main.js"></script>
 		<div id="wrapper">
 			<div id="scene3d"></div>
-			<div id="labels"/>
+			<div id="labels"></div>
+			<div id="notes">
+				<ol>
+					<li>Dec 31, 2023: Added the ability to show which muscles face forward and which face back.</li>
+				</ol>
+			</p>
 		</div>
 	</body>
 </html>

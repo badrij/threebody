@@ -18,6 +18,8 @@ var raycaster = new THREE.Raycaster();
 var mouse = new THREE.Vector2();
 var orbited = false;
 
+const palette = ["rgba(187, 204, 199, 1)", "rgba(182, 167, 146, 1)", "rgba(167, 116, 142, 1)", "rgba(233, 211, 202, 1)", "rgba(189, 102, 96, 1)", "rgba(148, 86, 76, 1)", "rgba(187, 204, 199, 1)"];
+
 function cWidth() {
   return container.getBoundingClientRect().width;
 }
@@ -59,14 +61,16 @@ function init() {
     },
     undefined,
     function (error) {
-      console.error(error);
+      if (console) {
+        console.error(error);
+      }
     }
   );
 }
 
-function displayLabels(name) {
+function displayLabels(name, facing) {
   var label = document.createElement('p');
-  label.innerHTML = name;
+  label.innerHTML = [name, facing].join(' ');
   labelContainer.appendChild(label);
 }
 
@@ -76,7 +80,7 @@ function clearLabels() {
 
 function makeHighlightable(obj) {
   obj.isHighlightable = (obj.isMesh && obj.type=="SkinnedMesh");
-  obj.highlight = () => {};
+  obj.highlight = (faces) => {};
   obj.reset = () => {};
 
   function fullNames() {
@@ -100,9 +104,8 @@ function makeHighlightable(obj) {
   obj.isHighlighted = false;
   if (!obj.isMuscle) return;
 
-  obj.highlight = () => {
-    displayLabels(obj.hierarchicalName());
-    // mat.emissive.set(0xbb8899);
+  obj.highlight = (facing) => {
+    displayLabels(obj.hierarchicalName(), facing);
     mat.emissive.set(0xcc8899 * (Math.random() * (0.5-0.7) + 0.5));
     mat.toneMapped = false;
     obj.isHighlighted = true;
@@ -182,11 +185,16 @@ function onClick(event) {
     raycaster.setFromCamera(mouse, camera);
     var intersects = raycaster.intersectObjects([model]);
     if (intersects.length > 0) {
-      clearLabels()
-      // intersects.forEach((i) => {
-      //   console.log("dot: ", /* camera.getWorldDirection(new THREE.Vector3()).dot(i.face.normal), */ i.object.hierarchicalName(), i.face);
-      // });
-      new Set(intersects.map((i) => i.object)).forEach((o) => o.highlight());
+      clearLabels();
+      var allObjects = intersects.map((i) => i.object);
+      var uniqueObjects = Array.from(new Set(intersects.map((i) => i.object)));
+      var facingBack = uniqueObjects.filter((o) => new IntersectObj(o).faces());
+      uniqueObjects.forEach((o) => {
+        if (!facingBack.includes(0)) {
+          o.highlight("");
+        }
+      });
+      facingBack.forEach((o) => o.highlight("(facing back)"));
     }
 }
 document.addEventListener('click', onClick, false);
@@ -195,4 +203,32 @@ function animate() {
   requestAnimationFrame(animate);
   controls.update();
   renderer.render(scene, camera);
+}
+
+class IntersectObj {
+  constructor(object) {
+    this.geometry = object.geometry;
+  }
+
+  faces = () => {
+    return camera.getWorldDirection(new THREE.Vector3()).dot(this.geoNormal()) < 0;
+  }
+
+  geoNormal = () => {
+    let pos = this.geometry.attributes.position;
+    let idx = this.geometry.index;
+    let tri = new THREE.Triangle();
+    let a = new THREE.Vector3(),
+        b = new THREE.Vector3(),
+        c = new THREE.Vector3();
+
+    for (let f = 0; f < 3; f++) {
+        let idxBase = f * 3;
+        a.fromBufferAttribute(pos, idx.getX(idxBase + 0));
+        b.fromBufferAttribute(pos, idx.getX(idxBase + 1));
+        c.fromBufferAttribute(pos, idx.getX(idxBase + 2));
+        tri.set(a, b, c);
+    }
+    return tri.getNormal(new THREE.Vector3());
+  }
 }
