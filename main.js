@@ -194,7 +194,7 @@ function onClick(event) {
           o.highlight("");
         }
       });
-      facingBack.forEach((o) => o.highlight("(facing back)"));
+      facingBack.forEach((o) => o.highlight("(facing away)"));
     }
 }
 document.addEventListener('click', onClick, false);
