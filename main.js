@@ -190,7 +190,7 @@ function onClick(event) {
       var uniqueObjects = Array.from(new Set(intersects.map((i) => i.object)));
       var facingBack = uniqueObjects.filter((o) => new IntersectObj(o).faces());
       uniqueObjects.forEach((o) => {
-        if (!facingBack.includes(0)) {
+        if (!facingBack.includes(o)) {
           o.highlight("");
         }
       });
